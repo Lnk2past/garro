@@ -1,0 +1,41 @@
+{
+    "version": 3,
+    "vendor": {
+        "conan": {}
+    },
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 15,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "conan-debug",
+            "displayName": "'conan-debug' config",
+            "description": "'conan-debug' configure using 'Unix Makefiles' generator",
+            "generator": "Unix Makefiles",
+            "cacheVariables": {
+                "CMAKE_POLICY_DEFAULT_CMP0091": "NEW",
+                "CMAKE_BUILD_TYPE": "Debug"
+            },
+            "toolchainFile": "generators/conan_toolchain.cmake",
+            "binaryDir": "/workspaces/garro/build/Debug"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "conan-debug",
+            "configurePreset": "conan-debug",
+            "jobs": 64
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "conan-debug",
+            "configurePreset": "conan-debug",
+            "environment": {
+                "OPENSSL_MODULES": "/root/.conan2/p/b/opens5727cfeb311da/p/lib/ossl-modules"
+            }
+        }
+    ]
+}

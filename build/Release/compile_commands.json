@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/workspaces/garro/build/Release/src",
+  "command": "/usr/local/bin/c++ -DARROW_STATIC -DBOOST_STACKTRACE_ADDR2LINE_LOCATION=\\\"/usr/bin/addr2line\\\" -DBOOST_STACKTRACE_USE_ADDR2LINE -DBOOST_STACKTRACE_USE_BACKTRACE -DBOOST_STACKTRACE_USE_NOOP -DPARQUET_STATIC -I/workspaces/garro/src -I/workspaces/garro/include -isystem /root/.conan2/p/b/sqlit007a5b8578b55/p/include -isystem /root/.conan2/p/b/arrow801200a582867/p/include -isystem /root/.conan2/p/b/fmt10ba1c00e77a5/p/include -isystem /root/.conan2/p/nlohm0567ffc90cfc1/p/include -m64 -O3 -DNDEBUG -std=c++23 -Wall -Wextra -Wpedantic -Werror -std=c++23 -o CMakeFiles/garro.dir/garro.cpp.o -c /workspaces/garro/src/garro.cpp",
+  "file": "/workspaces/garro/src/garro.cpp"
+}
+]

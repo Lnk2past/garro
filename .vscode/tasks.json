@@ -1,0 +1,35 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Conan: Install",
+			"command": "conan install . --build=missing -c tools.system.package_manager:mode=install && conan install . --build=missing -s build_type=Debug -c tools.system.package_manager:mode=install && cmake --preset conan-release && cmake --preset conan-debug",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [],
+			"detail": "Configure build"
+		},
+		{
+			"type": "shell",
+			"label": "CMake: Build Release",
+			"command": "cmake --build --preset conan-release",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [],
+			"detail": "Build Release"
+		},
+		{
+			"type": "shell",
+			"label": "CMake: Build Debug",
+			"command": "cmake --build --preset conan-debug",
+			"group": {
+				"kind": "build",
+			},
+			"problemMatcher": [],
+			"detail": "Build Debug"
+		}
+	]
+}
