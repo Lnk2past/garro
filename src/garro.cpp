@@ -18,4 +18,13 @@ auto main(int, char **) -> int
 
     csv_writer.open(std::filesystem::path{"test.csv"});
     csv_writer.write(1, 2, 3);
+
+    auto arrow_writer = garro::feather::Writer(
+        garro::Column<int>("a"),
+        garro::Column<int>("b"),
+        garro::Column<int>("c"));
+
+    arrow_writer.open(std::filesystem::path{"test.arrow"});
+    arrow_writer.write(1, 2, 3);
+    arrow_writer.close();
 }
