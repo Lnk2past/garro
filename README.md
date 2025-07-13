@@ -1,13 +1,15 @@
 # garro
 
-This is an educational endeavor into learning a bit more about OpenGL and compute shaders using C++20. Some goals, which will absolutely change as I experiement and mess around with it all:
+This is an educational endeavor into learning a bit more about serialization techniques and formats using C++23. Some goals, which will absolutely change as I experiement and mess around with it all:
 
-* Classes/wrappers for defining compute shaders
-    * I want to be able to create a shader object and interface with that object for compiling, loading data, creating buffers, reading from buffers, etc.
-    * Ideally would be able to template types as much as I can
-        * Unclear how to do this in GLSL yet
-* Learn about and integrate [shader-slang](https://shader-slang.org/)
-* Who knows? I don't know anything about this stuff yet, so I don't know what I don't know yet.
+* Class(es) for defining tabular structures with different serialization backends
+    * CSV
+    * Apache Arrow/Parquet, with optional DuckDB backend
+    * PostgreSQL
+    * HDF5 (maybe?)
+    * Other formats?
+* I want to be able to define tables at compile-time with fixed types
+* How can we maximize performance? Minimize copies?
 
 <center><img src="garro.png" width="120"></center>
 
