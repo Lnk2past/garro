@@ -1,4 +1,5 @@
 build
 .venv
+.vscode/settings.json
 test.arrow
 test.csv

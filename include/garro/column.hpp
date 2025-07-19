@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 
 namespace garro
 {
@@ -8,6 +8,6 @@ namespace garro
     struct Column
     {
         using type = T;
-        std::string name;
+        std::string_view name;
     };
 }

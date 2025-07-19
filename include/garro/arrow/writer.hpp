@@ -21,10 +21,16 @@ namespace garro::feather
         using ValueTuple = std::tuple<typename Columns::type...>;
 
     public:
+        static constexpr auto ext = std::string_view{".arrow"};
+
         Writer(Columns &&...columns_) : columns(std::forward_as_tuple(columns_...))
         {
-            set_schema(columns_...);
-            init_storage();
+            set_schema((std::forward<Columns>(columns_))...);
+        }
+
+        ~Writer()
+        {
+            close();
         }
 
         auto open(const std::filesystem::path &path)
@@ -38,7 +44,7 @@ namespace garro::feather
             }
             output_stream = *result;
 
-            auto writer_result = arrow::ipc::MakeFileWriter(output_stream, schema);
+            auto writer_result = arrow::ipc::MakeStreamWriter(output_stream, schema);
             if (!writer_result.ok())
             {
                 throw std::runtime_error("Failed to create Arrow file writer");
@@ -48,23 +54,33 @@ namespace garro::feather
 
         auto close() -> void
         {
-            write_buffered_rows();
+            flush();
             [[maybe_unused]] auto a = file_writer->Close();
             [[maybe_unused]] auto b = output_stream->Close();
         }
 
-        template <typename First, typename... Rest>
-        auto buffer(First &&first, Rest &&...rest) -> void
+        template <typename... T>
+        auto buffer(T &&...values) -> void
         {
-            store_row(std::forward<First>(first), std::forward<Rest>(rest)...);
+            store_row_impl(std::index_sequence_for<Columns...>{}, values...);
         }
 
         auto flush() -> void
         {
-            // No-op: Arrow data is written on `close()`
+            std::vector<std::shared_ptr<arrow::Array>> arrays;
+            build_arrays(arrays);
+
+            int64_t num_rows = std::get<0>(data_vectors).size();
+            auto batch = arrow::RecordBatch::Make(schema, num_rows, arrays);
+
+            [[maybe_unused]] auto a = file_writer->WriteRecordBatch(*batch);
+
+            std::apply([](auto &...data)
+                       { (data.clear(), ...); }, data_vectors);
         }
 
-        auto write(typename Columns::type... values) -> void
+        template <typename... T>
+        auto write(T &&...values) -> void
         {
             buffer(std::forward<typename Columns::type>(values)...);
             flush();
@@ -81,62 +97,17 @@ namespace garro::feather
         // Internal storage
         std::tuple<std::vector<typename Columns::type>...> data_vectors;
 
-        template <typename First, typename... Rest>
-        auto set_schema(First &&first, Rest &&...rest)
+        auto set_schema(Columns &&...columns)
         {
             std::vector<std::shared_ptr<arrow::Field>> fields = {
-                arrow::field(first.name, infer_arrow_type<typename std::decay_t<First>::type>()),
-                arrow::field(rest.name, infer_arrow_type<typename std::decay_t<decltype(rest)>::type>())...};
+                arrow::field(std::string(columns.name), arrow::CTypeTraits<typename std::decay_t<decltype(columns)>::type>::type_singleton())...};
             schema = std::make_shared<arrow::Schema>(fields);
-        }
-
-        void init_storage()
-        {
-            data_vectors = std::tuple<std::vector<typename Columns::type>...>{};
-        }
-
-        void store_row(typename Columns::type... values)
-        {
-            store_row_impl(std::index_sequence_for<Columns...>{}, values...);
         }
 
         template <std::size_t... Is>
         void store_row_impl(std::index_sequence<Is...>, typename Columns::type... values)
         {
             ((std::get<Is>(data_vectors).push_back(values)), ...);
-        }
-
-        void write_buffered_rows()
-        {
-            std::vector<std::shared_ptr<arrow::Array>> arrays;
-            build_arrays(arrays);
-
-            int64_t num_rows = std::get<0>(data_vectors).size();
-            auto batch = arrow::RecordBatch::Make(schema, num_rows, arrays);
-
-            [[maybe_unused]] auto a = file_writer->WriteRecordBatch(*batch);
-        }
-
-        void write_arrow_file()
-        {
-            std::vector<std::shared_ptr<arrow::Array>> arrays;
-            build_arrays(arrays);
-
-            int64_t num_rows = std::get<0>(data_vectors).size();
-            auto batch = arrow::RecordBatch::Make(schema, num_rows, arrays);
-
-            auto output_res = arrow::io::FileOutputStream::Open(file_path.string());
-            if (!output_res.ok())
-                throw std::runtime_error("Failed to open file: " + file_path.string());
-
-            auto file_writer_res = arrow::ipc::MakeFileWriter(*output_res, schema);
-            if (!file_writer_res.ok())
-                throw std::runtime_error("Failed to create Arrow file writer");
-
-            auto file_writer = *file_writer_res;
-            [[maybe_unused]] auto write_status = file_writer->WriteRecordBatch(*batch);
-            [[maybe_unused]] auto close_status = file_writer->Close();
-            [[maybe_unused]] auto ostatus = output_res.ValueOrDie()->Close();
         }
 
         void build_arrays(std::vector<std::shared_ptr<arrow::Array>> &out)
@@ -159,23 +130,6 @@ namespace garro::feather
             std::shared_ptr<arrow::Array> array;
             [[maybe_unused]] auto b = builder.Finish(&array);
             return array;
-        }
-
-        template <typename T>
-        static auto infer_arrow_type() -> std::shared_ptr<arrow::DataType>
-        {
-            if constexpr (std::is_same_v<T, int32_t>)
-                return arrow::int32();
-            else if constexpr (std::is_same_v<T, int64_t>)
-                return arrow::int64();
-            else if constexpr (std::is_same_v<T, float>)
-                return arrow::float32();
-            else if constexpr (std::is_same_v<T, double>)
-                return arrow::float64();
-            else if constexpr (std::is_same_v<T, std::string>)
-                return arrow::utf8();
-            else
-                static_assert(sizeof(T) == 0, "Unsupported Arrow type");
         }
     };
 }
