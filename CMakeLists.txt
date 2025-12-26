@@ -4,9 +4,9 @@ project (garro)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
+find_package(MCAP CONFIG REQUIRED)
 find_package(SQLite3 CONFIG REQUIRED)
 
 add_compile_options(-std=c++23)

@@ -4,132 +4,151 @@
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 
+#include "garro/arrow/buffer_policy.hpp"
+#include "garro/arrow/column.hpp"
+
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <tuple>
+#include <type_traits>
+#include <utility>
 #include <vector>
-
-#include "garro/column.hpp"
 
 namespace garro::feather
 {
-    template <typename... Columns>
-    class Writer
+
+template <typename BufferPolicy, typename... Columns> class Writer
+{
+    using ColumnTuple = std::tuple<std::decay_t<Columns>...>;
+    static constexpr std::size_t N = sizeof...(Columns);
+
+  public:
+    static constexpr auto ext = std::string_view{".arrow"};
+
+    template <typename BP>
+        requires(!IsColumn<BP>)
+    Writer(BP bp, Columns... cols)
+        : buffer_policy(std::move(bp)), columns(std::move(cols)...),
+          schema(make_schema(std::index_sequence_for<Columns...>{}))
     {
-        using ColumnTypes = std::tuple<Columns...>;
-        using ValueTuple = std::tuple<typename Columns::type...>;
+    }
 
-    public:
-        static constexpr auto ext = std::string_view{".arrow"};
+    Writer(Columns... cols)
+        : buffer_policy(buffer_policies::Buffered{}), columns(std::move(cols)...),
+          schema(make_schema(std::index_sequence_for<Columns...>{}))
+    {
+    }
 
-        Writer(Columns &&...columns_) : columns(std::forward_as_tuple(columns_...))
+    ~Writer()
+    {
+        close();
+    }
+
+    auto open(const std::filesystem::path &path) -> void
+    {
+        file_path = path;
+        auto status = [&]() {
+            auto write_options = arrow::ipc::IpcWriteOptions::Defaults();
+            ARROW_ASSIGN_OR_RAISE(output_stream, arrow::io::FileOutputStream::Open(file_path.string()));
+            ARROW_ASSIGN_OR_RAISE(file_writer, arrow::ipc::MakeFileWriter(output_stream.get(), schema, write_options));
+            return arrow::Status::OK();
+        }();
+        if (status != arrow::Status::OK())
         {
-            set_schema((std::forward<Columns>(columns_))...);
+            throw std::runtime_error("File not opened");
         }
+    }
 
-        ~Writer()
-        {
-            close();
-        }
-
-        auto open(const std::filesystem::path &path)
-        {
-            file_path = path;
-
-            auto result = arrow::io::FileOutputStream::Open(file_path.string());
-            if (!result.ok())
-            {
-                throw std::runtime_error("Failed to open output stream for: " + file_path.string());
-            }
-            output_stream = *result;
-
-            auto writer_result = arrow::ipc::MakeStreamWriter(output_stream, schema);
-            if (!writer_result.ok())
-            {
-                throw std::runtime_error("Failed to create Arrow file writer");
-            }
-            file_writer = *writer_result;
-        }
-
-        auto close() -> void
+    auto close() -> void
+    {
+        if (file_writer)
         {
             flush();
-            [[maybe_unused]] auto a = file_writer->Close();
-            [[maybe_unused]] auto b = output_stream->Close();
+            std::ignore = file_writer->Close();
+            file_writer.reset();
+        }
+        if (output_stream)
+        {
+            std::ignore = output_stream->Close();
+            output_stream.reset();
+        }
+    }
+
+    template <typename... T> auto buffer(T &&...values) -> void
+    {
+        buffer_impl(std::make_index_sequence<N>{}, std::forward<T>(values)...);
+    }
+
+    auto flush() -> void
+    {
+        if (!file_writer)
+        {
+            throw std::runtime_error("File writer not opened");
         }
 
-        template <typename... T>
-        auto buffer(T &&...values) -> void
+        arrays.clear();
+        arrays.reserve(N);
+
+        std::apply([&](auto &...elems) { (arrays.push_back(elems.build()), ...); }, columns);
+        const auto num_rows = arrays[0]->length();
+        if (num_rows == 0)
         {
-            store_row_impl(std::index_sequence_for<Columns...>{}, values...);
+            return;
         }
 
-        auto flush() -> void
+        auto batch = arrow::RecordBatch::Make(schema, num_rows, arrays);
+        std::ignore = file_writer->WriteRecordBatch(*batch);
+
+        std::apply([](auto &...elems) { (elems.clear(), ...); }, columns);
+        arrays.clear();
+    }
+
+    template <typename... T> auto write(T &&...values) -> void
+    {
+        buffer(std::forward<T>(values)...);
+        if (!buffer_policy(*this))
         {
-            std::vector<std::shared_ptr<arrow::Array>> arrays;
-            build_arrays(arrays);
-
-            int64_t num_rows = std::get<0>(data_vectors).size();
-            auto batch = arrow::RecordBatch::Make(schema, num_rows, arrays);
-
-            [[maybe_unused]] auto a = file_writer->WriteRecordBatch(*batch);
-
-            std::apply([](auto &...data)
-                       { (data.clear(), ...); }, data_vectors);
-        }
-
-        template <typename... T>
-        auto write(T &&...values) -> void
-        {
-            buffer(std::forward<typename Columns::type>(values)...);
             flush();
         }
+    }
 
-    private:
-        ColumnTypes columns;
-        std::shared_ptr<arrow::Schema> schema;
-        std::filesystem::path file_path;
+    auto get_rows_buffered() const -> std::uint32_t
+    {
+        return std::get<0>(columns).get_buffered_count();
+    }
 
-        std::shared_ptr<arrow::io::FileOutputStream> output_stream;
-        std::shared_ptr<arrow::ipc::RecordBatchWriter> file_writer;
+  private:
+    BufferPolicy buffer_policy;
+    ColumnTuple columns;
+    std::shared_ptr<arrow::Schema> schema;
+    std::filesystem::path file_path;
 
-        // Internal storage
-        std::tuple<std::vector<typename Columns::type>...> data_vectors;
+    std::shared_ptr<arrow::io::FileOutputStream> output_stream;
+    std::shared_ptr<arrow::ipc::RecordBatchWriter> file_writer;
+    std::vector<std::shared_ptr<arrow::Array>> arrays{};
 
-        auto set_schema(Columns &&...columns)
-        {
-            std::vector<std::shared_ptr<arrow::Field>> fields = {
-                arrow::field(std::string(columns.name), arrow::CTypeTraits<typename std::decay_t<decltype(columns)>::type>::type_singleton())...};
-            schema = std::make_shared<arrow::Schema>(fields);
-        }
+    template <std::size_t... Is> auto make_schema(std::index_sequence<Is...>) -> std::shared_ptr<arrow::Schema>
+    {
+        arrow::FieldVector fields{arrow::field(
+            std::string(std::get<Is>(columns).name),
+            arrow::CTypeTraits<typename std::decay_t<decltype(std::get<Is>(columns))>::type>::type_singleton())...};
+        return std::make_shared<arrow::Schema>(std::move(fields));
+    }
 
-        template <std::size_t... Is>
-        void store_row_impl(std::index_sequence<Is...>, typename Columns::type... values)
-        {
-            ((std::get<Is>(data_vectors).push_back(values)), ...);
-        }
+    template <std::size_t... Is, typename... T> auto buffer_impl(std::index_sequence<Is...>, T &&...values) -> void
+    {
+        (std::get<Is>(columns).buffer(std::forward<T>(values)), ...);
+    }
+};
 
-        void build_arrays(std::vector<std::shared_ptr<arrow::Array>> &out)
-        {
-            build_arrays_impl(out, std::index_sequence_for<Columns...>{});
-        }
+// Guide 1: Only matches if the first argument is NOT a column.
+template <typename T, typename... Args>
+    requires(!IsColumn<std::decay_t<T>>)
+Writer(T, Args...) -> Writer<T, Args...>;
 
-        template <std::size_t... Is>
-        void build_arrays_impl(std::vector<std::shared_ptr<arrow::Array>> &out, std::index_sequence<Is...>)
-        {
-            (..., (out.push_back(build_array(std::get<Is>(data_vectors)))));
-        }
-
-        template <typename T>
-        auto build_array(const std::vector<T> &data) -> std::shared_ptr<arrow::Array>
-        {
-            using BuilderType = typename arrow::CTypeTraits<T>::BuilderType;
-            BuilderType builder;
-            [[maybe_unused]] auto a = builder.AppendValues(data);
-            std::shared_ptr<arrow::Array> array;
-            [[maybe_unused]] auto b = builder.Finish(&array);
-            return array;
-        }
-    };
-}
+// Guide 2: Matches if EVERYTHING passed is a column.
+template <typename... Args>
+    requires(IsColumn<std::decay_t<Args>> && ...)
+Writer(Args...) -> Writer<buffer_policies::Buffered, Args...>;
+} // namespace garro::feather

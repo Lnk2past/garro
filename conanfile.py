@@ -7,11 +7,16 @@ class garro(ConanFile):
     settings = 'os', 'compiler', 'build_type', 'arch'
     generators = 'CMakeToolchain', 'CMakeDeps'
 
+    def configure(self):
+        self.options["arrow/22.0.0"].parquet = False
+        self.options["arrow/22.0.0"].with_boost = False
+        self.options["arrow/22.0.0"].with_thrift = False
+
     def requirements(self):
-        self.requires("fmt/11.1.1")
-        self.requires("nlohmann_json/3.11.3")
-        self.requires("arrow/19.0.1")
-        self.requires("sqlite3/3.49.1")
+        self.requires("nlohmann_json/3.12.0")
+        self.requires("arrow/22.0.0")
+        self.requires("sqlite3/3.51.0")
+        self.requires("mcap/2.1.1")
 
     def build(self):
         cmake = CMake(self)

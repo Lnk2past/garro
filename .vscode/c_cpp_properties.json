@@ -8,7 +8,7 @@
                 "./src",
                 "./include",
                 "/usr/include",
-                "/usr/local/include/c++/13.2.0"
+                "/usr/local/include/c++/15.2.0"
             ],
             "cppStandard": "c++20",
             "configurationProvider": "ms-vscode.cmake-tools",
@@ -22,7 +22,7 @@
                 "./src",
                 "./include",
                 "/usr/include",
-                "/usr/local/include/c++/13.2.0"
+                "/usr/local/include/c++/15.2.0"
             ],
             "cppStandard": "c++20",
             "configurationProvider": "ms-vscode.cmake-tools",

@@ -1,5 +1,5 @@
 {
-  "image": "gcc:14.2.0",
+  "image": "gcc:15.2.0",
   "customizations": {
     // Configure properties specific to VS Code.
     "vscode": {
