@@ -1,22 +1,34 @@
 #include "garro/garro.hpp"
 
-#include <chrono>
-#include <iostream>
+#include <print>
 #include <string>
-#include <thread>
-
-using namespace std::chrono_literals;
 
 auto main() -> int
 {
-    auto writer = garro::feather::Writer{garro::buffer_policies::MaxRows{3}, garro::feather::Column<int>("a"),
-                                         garro::feather::Column<double>("b"), garro::feather::Column<std::string>("c")};
+    {
+        using garro::feather::Column;
+        auto writer = garro::feather::Writer{garro::buffer_policies::MaxRows{2}, Column<int>("a"), Column<double>("b"),
+                                             Column<std::string>("c")};
+        writer.open("test1.arrow");
+        writer.write(1, 3.14, "hello world");
+        writer.write(1, 3.14, "hello world");
 
-    writer.open("test.arrow");
-    writer.write(1, 3.14, "hello world");
-    writer.write(1, 3.14, "hello world");
-    writer.write(1, 3.14, "hello world");
-    writer.write(1, 3.14, "hello world");
-    writer.write(1, 3.14, "hello world");
-    writer.write(1, 3.14, "hello world");
+        std::println("setting...");
+
+        writer.set_buffer_policy([i = 0](const auto &) mutable {
+            if (((i++) % 2) == 0)
+            {
+                std::println("!!!");
+                return true;
+            }
+            else
+            {
+                std::println("???");
+                return false;
+            }
+        });
+
+        writer.write(1, 3.14, "hello world");
+        writer.write(1, 3.14, "hello world");
+    }
 }

@@ -16,7 +16,7 @@ template <typename T> struct Column
 
     std::string_view name;
     std::vector<type> data{};
-    arrow::CTypeTraits<T>::BuilderType builder{};
+    arrow::CTypeTraits<type>::BuilderType builder{};
 
     template <typename U> auto buffer(U &&t) -> void
     {
@@ -43,15 +43,10 @@ template <typename T> struct Column
     }
 };
 
-template <typename T> struct is_column_v : std::false_type
-{
-};
+template <typename> inline constexpr bool is_column = false;
 
-template <typename T> struct is_column_v<Column<T>> : std::true_type
-{
-};
+template <typename T> inline constexpr bool is_column<Column<T>> = true;
 
-// The Concept
 template <typename T>
-concept IsColumn = is_column_v<std::decay_t<T>>::value;
+concept ColumnT = is_column<std::decay_t<T>>;
 } // namespace garro::feather

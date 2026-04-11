@@ -7,7 +7,7 @@ namespace garro::buffer_policies
 {
 struct Buffered
 {
-    auto operator()(const auto &writer) -> bool
+    auto operator()(const auto &) -> bool
     {
         return true;
     }
@@ -15,7 +15,7 @@ struct Buffered
 
 struct Unbuffered
 {
-    auto operator()(const auto &writer) -> bool
+    auto operator()(const auto &) -> bool
     {
         return true;
     }
@@ -25,7 +25,7 @@ struct MaxRows
 {
     auto operator()(const auto &writer) -> bool
     {
-        if ((c += writer.get_rows_buffered()) < n)
+        if ((c += writer.get_rows_buffered()) <= n)
         {
             return true;
         }

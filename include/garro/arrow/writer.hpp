@@ -4,10 +4,11 @@
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 
-#include "garro/arrow/buffer_policy.hpp"
 #include "garro/arrow/column.hpp"
+#include "garro/buffer_policy.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -18,7 +19,7 @@
 namespace garro::feather
 {
 
-template <typename BufferPolicy, typename... Columns> class Writer
+template <typename... Columns> class Writer
 {
     using ColumnTuple = std::tuple<std::decay_t<Columns>...>;
     static constexpr std::size_t N = sizeof...(Columns);
@@ -27,16 +28,12 @@ template <typename BufferPolicy, typename... Columns> class Writer
     static constexpr auto ext = std::string_view{".arrow"};
 
     template <typename BP>
-        requires(!IsColumn<BP>)
-    Writer(BP bp, Columns... cols)
-        : buffer_policy(std::move(bp)), columns(std::move(cols)...),
-          schema(make_schema(std::index_sequence_for<Columns...>{}))
+        requires(std::invocable<BP, Writer> && !ColumnT<BP>)
+    Writer(BP &&bp, Columns... cols) : columns(std::move(cols)...), buffer_policy(bp)
     {
     }
 
-    Writer(Columns... cols)
-        : buffer_policy(buffer_policies::Buffered{}), columns(std::move(cols)...),
-          schema(make_schema(std::index_sequence_for<Columns...>{}))
+    Writer(Columns... cols) : columns(std::move(cols)...), buffer_policy(buffer_policies::Buffered{})
     {
     }
 
@@ -47,10 +44,9 @@ template <typename BufferPolicy, typename... Columns> class Writer
 
     auto open(const std::filesystem::path &path) -> void
     {
-        file_path = path;
         auto status = [&]() {
             auto write_options = arrow::ipc::IpcWriteOptions::Defaults();
-            ARROW_ASSIGN_OR_RAISE(output_stream, arrow::io::FileOutputStream::Open(file_path.string()));
+            ARROW_ASSIGN_OR_RAISE(output_stream, arrow::io::FileOutputStream::Open(path.string()));
             ARROW_ASSIGN_OR_RAISE(file_writer, arrow::ipc::MakeFileWriter(output_stream.get(), schema, write_options));
             return arrow::Status::OK();
         }();
@@ -113,16 +109,22 @@ template <typename BufferPolicy, typename... Columns> class Writer
         }
     }
 
+    template <typename BP>
+        requires(std::invocable<BP, Writer>)
+    auto set_buffer_policy(BP &&bp)
+    {
+        buffer_policy = std::move(bp);
+    }
+
     auto get_rows_buffered() const -> std::uint32_t
     {
         return std::get<0>(columns).get_buffered_count();
     }
 
   private:
-    BufferPolicy buffer_policy;
     ColumnTuple columns;
-    std::shared_ptr<arrow::Schema> schema;
-    std::filesystem::path file_path;
+    std::shared_ptr<arrow::Schema> schema = make_schema(std::index_sequence_for<Columns...>{});
+    std::function<bool(const Writer &)> buffer_policy;
 
     std::shared_ptr<arrow::io::FileOutputStream> output_stream;
     std::shared_ptr<arrow::ipc::RecordBatchWriter> file_writer;
@@ -130,7 +132,7 @@ template <typename BufferPolicy, typename... Columns> class Writer
 
     template <std::size_t... Is> auto make_schema(std::index_sequence<Is...>) -> std::shared_ptr<arrow::Schema>
     {
-        arrow::FieldVector fields{arrow::field(
+        auto fields = arrow::FieldVector{arrow::field(
             std::string(std::get<Is>(columns).name),
             arrow::CTypeTraits<typename std::decay_t<decltype(std::get<Is>(columns))>::type>::type_singleton())...};
         return std::make_shared<arrow::Schema>(std::move(fields));
@@ -142,13 +144,4 @@ template <typename BufferPolicy, typename... Columns> class Writer
     }
 };
 
-// Guide 1: Only matches if the first argument is NOT a column.
-template <typename T, typename... Args>
-    requires(!IsColumn<std::decay_t<T>>)
-Writer(T, Args...) -> Writer<T, Args...>;
-
-// Guide 2: Matches if EVERYTHING passed is a column.
-template <typename... Args>
-    requires(IsColumn<std::decay_t<Args>> && ...)
-Writer(Args...) -> Writer<buffer_policies::Buffered, Args...>;
 } // namespace garro::feather
