@@ -9,6 +9,9 @@ auto main() -> int
         using garro::feather::Column;
         auto writer = garro::feather::Writer{garro::buffer_policies::MaxRows{2}, Column<int>("a"), Column<double>("b"),
                                              Column<std::string>("c")};
+
+        writer.reserve_builders(64);
+
         writer.open("test1.arrow");
         writer.write(1, 3.14, "hello world");
         writer.write(1, 3.14, "hello world");

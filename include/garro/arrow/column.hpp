@@ -28,12 +28,17 @@ template <typename T> struct Column
         return array;
     }
 
+    auto reserve(const std::int64_t capacity) -> void
+    {
+        [[maybe_unused]] auto status = builder.Reserve(capacity);
+    }
+
     auto clear() -> void
     {
         builder.Reset();
     }
 
-    auto get_buffered_count() const -> std::uint32_t
+    auto get_buffered_count() const -> std::int64_t
     {
         return builder.length();
     }

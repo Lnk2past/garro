@@ -118,6 +118,11 @@ template <typename... Columns> class Writer
         buffer_policy = std::move(bp);
     }
 
+    auto reserve_builders(const std::int64_t capacity) -> void
+    {
+        std::apply([&](auto &...elems) { (elems.reserve(capacity), ...); }, columns);
+    }
+
     auto get_rows_buffered() const -> std::int64_t
     {
         return std::get<0>(columns).get_buffered_count();
