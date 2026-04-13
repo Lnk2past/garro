@@ -17,7 +17,7 @@ struct Unbuffered
 {
     auto operator()(const auto &) -> bool
     {
-        return true;
+        return false;
     }
 };
 
@@ -33,8 +33,8 @@ struct MaxRows
         return false;
     }
 
-    std::uint32_t n{};
-    std::uint32_t c{};
+    std::int64_t n{};
+    std::int64_t c{};
 };
 
 // struct MaxSize

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <print>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -56,7 +57,7 @@ template <typename... Columns> class Writer
         }
     }
 
-    auto close() -> void
+    auto close() noexcept -> void
     {
         if (file_writer)
         {
@@ -80,7 +81,8 @@ template <typename... Columns> class Writer
     {
         if (!file_writer)
         {
-            throw std::runtime_error("File writer not opened");
+            std::println("File writer not opened");
+            return;
         }
 
         arrays.clear();
@@ -116,7 +118,7 @@ template <typename... Columns> class Writer
         buffer_policy = std::move(bp);
     }
 
-    auto get_rows_buffered() const -> std::uint32_t
+    auto get_rows_buffered() const -> std::int64_t
     {
         return std::get<0>(columns).get_buffered_count();
     }
@@ -126,8 +128,8 @@ template <typename... Columns> class Writer
     std::shared_ptr<arrow::Schema> schema = make_schema(std::index_sequence_for<Columns...>{});
     std::function<bool(const Writer &)> buffer_policy;
 
-    std::shared_ptr<arrow::io::FileOutputStream> output_stream;
-    std::shared_ptr<arrow::ipc::RecordBatchWriter> file_writer;
+    std::shared_ptr<arrow::io::FileOutputStream> output_stream{};
+    std::shared_ptr<arrow::ipc::RecordBatchWriter> file_writer{};
     std::vector<std::shared_ptr<arrow::Array>> arrays{};
 
     template <std::size_t... Is> auto make_schema(std::index_sequence<Is...>) -> std::shared_ptr<arrow::Schema>
